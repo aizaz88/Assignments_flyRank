@@ -39,6 +39,26 @@ app.get("/tasks/:id", (req, res) => {
   res.json(task);
 });
 
+// CREATE a new task — now inserts into SQLite
+app.post("/tasks", (req, res) => {
+  const { title } = req.body;
+
+  if (!title || title.trim() === "") {
+    return res
+      .status(400)
+      .json({ error: "Title is required and cannot be empty" });
+  }
+
+  const insert = db.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)");
+  const result = insert.run(title.trim(), 0);
+
+  const newTask = db
+    .prepare("SELECT * FROM tasks WHERE id = ?")
+    .get(result.lastInsertRowid);
+
+  res.status(201).json(newTask);
+});
+
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
