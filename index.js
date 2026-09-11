@@ -2,6 +2,7 @@ const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const openapiSpec = require("./openapi.json");
 const db = require("./db.js");
+const { pool, initDb } = require("./db.js");
 
 const app = express();
 const PORT = 3000;
@@ -107,6 +108,16 @@ app.delete("/tasks/:id", (req, res) => {
 });
 
 ////////////////////////
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running at http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to initialize database:", err);
+  });
+
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
