@@ -1,104 +1,169 @@
-# Task API
+# Task API with Supabase Authentication
 
-A CRUD API for managing a to-do list, built with Node.js and Express, backed by a containerized PostgreSQL database.
+A Node.js + Express API with a PostgreSQL database (in Docker) and secure user authentication powered by **Supabase Auth**. Users can sign up, log in and log out, and certain routes answer only to logged-in users.
+
+Built for FlyRank Internship, Backend Track, Assignment A4 (Auth: Login & protect).
 
 ## What this is
 
-This API lets you create, read, update, and delete tasks. Data is stored in PostgreSQL, running in a
-Docker container alongside the app itself — the whole stack starts with a single command, and data
-survives even a full container restart.
+- **Task CRUD API** (from earlier assignments), stored in PostgreSQL.
+- **Authentication** through Supabase Auth, which acts as the Identity Provider. This app never stores or hashes passwords. It forwards credentials to Supabase and verifies the JWT that Supabase returns.
+- **Protected routes** guarded by a single reusable middleware (`middleware/auth.js`).
+- **Swagger UI** at `/docs` with an **Authorize** button for bearer tokens.
 
-## Storage history
+## How authentication works
 
-This project has used three storage engines as it evolved:
+1. The client sends email + password to `POST /auth/login`.
+2. The server forwards them to Supabase, which returns a JWT (the access token).
+3. The client sends that token on later requests: `Authorization: Bearer <token>`.
+4. The `requireAuth` middleware asks Supabase whether the token is real (`supabase.auth.getUser(token)`).
+   - Valid: the user is attached to `req.user` and the route runs.
+   - Missing, malformed, tampered or expired: the server answers `401`.
 
-1. In-memory array (Assignment 1) — lost on every restart.
-2. SQLite file (Assignment 2) — survived app restarts, single file on disk.
-3. **PostgreSQL in Docker (this assignment)** — a real database server, running in its own container,
-   with persistent storage via a Docker volume.
+## Project structure
 
-The API itself never changed across any of these three swaps — only the storage layer underneath it did.
+```
+.
+├── index.js               # App entry: routes, Swagger, startup
+├── db.js                  # PostgreSQL pool + table setup
+├── supabase.js            # Supabase client
+├── middleware/
+│   └── auth.js            # requireAuth: token verification guard
+├── routes/
+│   ├── auth.js            # signup, login, logout
+│   └── protected.js       # profile, dashboard
+├── openapi.json           # Swagger / OpenAPI spec
+├── Dockerfile
+├── compose.yaml
+├── .env.example
+└── Readme.md
+```
 
-## How to run it
+## Setup
 
-\`\`\`bash
-git clone https://github.com/aizaz88/Assignment_Flyrank.git
-cd crud-task-api
+### 1. Create a Supabase project
+
+1. Create a free project at [supabase.com](https://supabase.com) (no credit card needed).
+2. Open **Project Settings → API** and copy the **Project URL** and the **anon (public) key**. Never use the `service_role` key.
+3. Open **Authentication → Sign In / Providers → Email** and turn **"Confirm email" off**, so a new signup can log in immediately (practice project only; leave it on in production).
+
+### 2. Configure environment variables
+
+```bash
+git clone https://github.com/aizaz88/Assignments_flyRank.git
+cd Assignments_flyRank
 cp .env.example .env
-docker compose up
-\`\`\`
+```
 
-That's it — one command starts both the app and its database. The database table is created automatically,
-and 3 example tasks are seeded on first run only.
+Then edit `.env` with your own values:
 
-Server runs at `http://localhost:3000`.
-
-## Environment variables
-
-See `.env.example` for the required variable:
-
-\`\`\`
+```
 DATABASE_URL=postgres://postgres:dev@localhost:5432/tasks
-\`\`\`
+SUPABASE_URL=your_project_url
+SUPABASE_KEY=your_anon_key
+PORT=3000
+```
 
-(Note: inside Docker Compose, the app actually connects to the database using the service name `db`
-instead of `localhost` — this is set automatically in `compose.yaml` and doesn't require any manual change.)
+`.env` is git-ignored and is never committed. Inside Docker Compose the app connects to the database through the service name `db`. This is set automatically in `compose.yaml`.
 
-## Endpoints
+### 3. Run it (one command)
 
-| Method | Path       | Description       |
-| ------ | ---------- | ----------------- |
-| GET    | /          | API info          |
-| GET    | /health    | Health check      |
-| GET    | /tasks     | List all tasks    |
-| GET    | /tasks/:id | Get a single task |
-| POST   | /tasks     | Create a new task |
-| PUT    | /tasks/:id | Update a task     |
-| DELETE | /tasks/:id | Delete a task     |
+```bash
+docker compose up --build
+```
 
-## Example request
+The server runs at `http://localhost:3000`. The database table is created automatically, and 3 example tasks are seeded on first run.
 
-\`\`\`bash
-curl -i -X POST http://localhost:3000/tasks -H "Content-Type: application/json" -d '{"title":"Buy milk"}'
-\`\`\`
+## API reference
 
-Example response:
+| Method | Path                   | Auth needed? | Description                              |
+| ------ | ---------------------- | ------------ | ---------------------------------------- |
+| POST   | `/auth/signup`         | No           | Create a new user account                |
+| POST   | `/auth/login`          | No           | Log in, returns access + refresh token   |
+| POST   | `/auth/logout`         | Bearer token | Log out                                  |
+| GET    | `/protected/profile`   | Bearer token | Current user's profile                   |
+| GET    | `/protected/dashboard` | Bearer token | Second protected route (same middleware) |
+| GET    | `/public/info`         | No           | Public message                           |
+| GET    | `/tasks`               | No           | List all tasks                           |
+| GET    | `/tasks/:id`           | No           | Get a single task                        |
+| POST   | `/tasks`               | No           | Create a task                            |
+| PUT    | `/tasks/:id`           | No           | Update a task                            |
+| DELETE | `/tasks/:id`           | No           | Delete a task                            |
 
-\`\`\`
-HTTP/1.1 201 Created
-Content-Type: application/json; charset=utf-8
+### Status codes
 
-{"id":4,"title":"Buy milk","done":false}
-\`\`\`
+| Code | Meaning in this API                                                      |
+| ---- | ------------------------------------------------------------------------ |
+| 200  | Login / read succeeded                                                   |
+| 201  | Signup succeeded                                                         |
+| 204  | Logout succeeded (no body)                                               |
+| 400  | Missing input (for example no password)                                  |
+| 401  | Missing, malformed, invalid or expired token, or wrong login credentials |
 
-## Database
+Every error returns JSON like `{ "error": "message" }`.
 
-Tasks are stored in PostgreSQL, running in its own Docker container (`db` service in `compose.yaml`),
-with a named volume (`taskdata`) so data survives a full `docker compose down` and `docker compose up`
-cycle.
+## Try it with curl
 
-![Postgres screenshot](postgres-screenshot.png)
+```bash
+# 1. Sign up
+curl -i -X POST http://localhost:3000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
 
-### Persistence proof
+# 2. Log in (copy the access_token from the response)
+curl -i -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
 
-Tested by creating a task, running `docker compose down` (stopping and removing both containers), then
-`docker compose up` again. The created task was still present in `GET /tasks` afterward — confirming the
-volume preserved the data even though the containers themselves were fully recreated.
+# 3. Call a protected route
+curl -i http://localhost:3000/protected/profile \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
 
-### Architecture note
+# 4. Tamper with the token (change one character) -> 401
+curl -i http://localhost:3000/protected/profile \
+  -H "Authorization: Bearer <ACCESS_TOKEN>x"
 
-The service and route logic (`index.js`) did not change in shape when moving from SQLite to Postgres —
-only the database queries inside the routes changed (placeholder syntax `?` \u2192 `$1`, and the driver
-itself). This is the same principle proven across all three storage swaps in this project: the API is the
-promise, the database is just where that promise is kept.
+# 5. Log out
+curl -i -X POST http://localhost:3000/auth/logout \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
 
 ## Swagger UI
 
-Interactive API docs available at `http://localhost:3000/docs` once the server is running.
+Interactive docs are at `http://localhost:3000/docs`.
+
+1. Run `POST /auth/login` with **Try it out** and copy the `access_token`.
+2. Click **Authorize** and paste the token (Swagger adds `Bearer` itself).
+3. Run **Try it out** on `GET /protected/profile`.
+
+![Swagger auth screenshot](swagger-auth-screenshot.png)
 
 ![Swagger UI screenshot](swagger-screenshot.png)
 
+## Security notes
+
+- **No password handling in this code.** Supabase stores accounts, hashes passwords and signs tokens.
+- **Secrets stay out of Git.** `.env` is git-ignored and `.env.example` holds placeholders only. Only the public `anon` key is used.
+- **One guard for all protected routes.** The auth check lives in `middleware/auth.js` and is reused, so no route can be accidentally left unchecked.
+- **Logout and stateless JWTs.** A JWT is valid until it expires (Supabase default: 1 hour). With only the anon key, the server cannot revoke an already-issued access token, so a token can still work briefly after logout. This is a known trade-off of stateless tokens.
+
+## Database
+
+Tasks are stored in PostgreSQL, running in its own Docker container (`db` service in `compose.yaml`), with a named volume (`taskdata`) so data survives `docker compose down` and `docker compose up`.
+
+![Postgres screenshot](postgres-screenshot.jpeg)
+
+### Persistence proof
+
+Tested by creating a task, running `docker compose down`, then `docker compose up` again. The task was still present in `GET /tasks`, so the volume preserved the data even though the containers were recreated.
+
+## Storage history
+
+1. In-memory array (Assignment 1)
+2. SQLite file (Assignment 2)
+3. PostgreSQL in Docker (Assignment 3)
+4. Supabase authentication added on top (Assignment 4, this one)
+
 ## Notes
 
-Running `docker compose down -v` (with the `-v` flag) removes the volume too, which would permanently
-delete all data — useful to know, and dangerous to do by accident.
+Running `docker compose down -v` (with `-v`) also removes the volume and permanently deletes all data.
