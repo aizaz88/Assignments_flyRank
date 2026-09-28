@@ -1,14 +1,27 @@
+const authRoutes = require("./routes/auth");
+require("dotenv").config();
+const { createClient } = require("@supabase/supabase-js");
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const openapiSpec = require("./openapi.json");
-const db = require("./db.js");
+
 const { pool, initDb } = require("./db.js");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+
+const { SUPABASE_URL, SUPABASE_KEY } = process.env;
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  throw new Error("Missing SUPABASE_URL or SUPABASE_KEY in .env");
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 app.use(express.json());
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(openapiSpec));
+app.use("/auth", authRoutes);
 
 app.get("/", (req, res) => {
   res.json({
@@ -118,7 +131,3 @@ initDb()
   .catch((err) => {
     console.error("Failed to initialize database:", err);
   });
-
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});

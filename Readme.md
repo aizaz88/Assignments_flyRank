@@ -22,7 +22,7 @@ The API itself never changed across any of these three swaps — only the storag
 ## How to run it
 
 \`\`\`bash
-git clone https://github.com/HussainAli7858/crud-task-api.git
+git clone https://github.com/aizaz88/Assignment_Flyrank.git
 cd crud-task-api
 cp .env.example .env
 docker compose up
