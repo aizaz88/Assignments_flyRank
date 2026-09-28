@@ -1,4 +1,5 @@
 const authRoutes = require("./routes/auth");
+const protectedRoutes = require("./routes/protected");
 require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
 const express = require("express");
@@ -22,6 +23,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 app.use(express.json());
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(openapiSpec));
 app.use("/auth", authRoutes);
+
+app.use("/protected", protectedRoutes);
+
+app.get("/public/info", (req, res) => {
+  res.status(200).json({ message: "Welcome stranger! This info is public." });
+});
 
 app.get("/", (req, res) => {
   res.json({
