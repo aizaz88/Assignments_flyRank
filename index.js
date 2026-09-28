@@ -21,7 +21,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 app.use(express.json());
-app.use("/docs", swaggerUi.serve, swaggerUi.setup(openapiSpec));
+app.use(
+  "/docs",
+  swaggerUi.serve,
+  swaggerUi.setup(openapiSpec, {
+    swaggerOptions: { persistAuthorization: true },
+  }),
+);
 app.use("/auth", authRoutes);
 
 app.use("/protected", protectedRoutes);
